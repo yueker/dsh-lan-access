@@ -1,5 +1,7 @@
 # dsh-lan-access
 
+**English** | [简体中文](README.zh-CN.md)
+
 A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profile bundle that makes the Web GUI work over **plain-http LAN IPs** (insecure browser contexts).
 
 ## Problem

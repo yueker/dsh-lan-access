@@ -1,0 +1,68 @@
+# dsh-lan-access
+
+[English](README.md) | **简体中文**
+
+一个 [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) Web 配置（profile）bundle，让 Web GUI 能通过 **纯 HTTP 局域网 IP**（非安全上下文）正常使用。
+
+## 问题
+
+DSH Web GUI 在客户端连接握手中使用 `crypto.randomUUID()`（Chrome 中**仅安全上下文可用**）生成 RPC id。当通过纯 HTTP 的局域网 IP（如 `http://192.168.2.102:3080`）访问 GUI 时，该源**不是**安全上下文，于是：
+
+1. `crypto.randomUUID()` 未定义并抛出 `TypeError`
+2. 连接握手（`host.describe`）在**发出任何请求之前**就失败
+3. WebSocket 被关闭（关闭码 1006），界面无限循环：
+   `[web-runtime] connection lost, retry #N`
+4. 页面一直卡在欢迎页——看不到会话，也看不到工作区
+
+`http://localhost` 正常，因为 localhost 属于安全上下文——这就是为什么在服务器本机正常、但从其他局域网设备访问却坏掉的原因。
+
+## 修复
+
+本 bundle 通过 `webServer` 的 index-tap 向每个被服务的 `index.html` 注入一段小 `<script>`，用 `crypto.getRandomValues()` 定义 `crypto.randomUUID()`——该 API 在**非安全上下文也可用**。polyfill 是符合规范的 RFC 4122 v4 UUID 生成器，仅在原生方法缺失时安装。
+
+## 安装
+
+需要 `pnpm`（供 `dsh plugin` 使用）和 `web` profile：
+
+```bash
+# 将包安装到 web profile（会自动加入 dsh.profile.bundles）
+dsh plugin --profile web add dsh-lan-access
+
+# 重启 web 应用
+dsh web
+```
+
+离线/手动安装（无 pnpm）：克隆或下载本仓库，然后
+
+```bash
+mkdir -p ~/.dsh/profiles/web/node_modules
+ln -s "$PWD" ~/.dsh/profiles/web/node_modules/dsh-lan-access
+# 在 ~/.dsh/profiles/web/package.json 的 "dsh.profile.bundles" 中加入 "dsh-lan-access"
+```
+
+## 验证
+
+重启后：
+
+```bash
+curl -s http://127.0.0.1:3080/ | grep -c randomUUID   # ≥ 2 表示 polyfill 已注入
+```
+
+然后从其他设备打开 `http://<你的局域网IP>:3080` 并强制刷新（`Ctrl+Shift+R`）。
+
+## 工作原理
+
+| 组件 | 作用 |
+|---|---|
+| `cordis.patch.yml` | bundle patch —— 插入一个 host 行（`secure-context-polyfill`） |
+| `lib/index.mjs` | 插件本体 —— 在 `ctx.webServer` 上注册 index-tap |
+
+插件声明 `inject: [webServer]`，用 `ctx.webServer.tapIndex()` 转换每个被服务的 `index.html`，在 `<head>` 之后（任何应用 bundle 运行之前）插入 polyfill。
+
+## 安全提示
+
+将 DSH 绑定到 `0.0.0.0` 会把 GUI（包含 agent/工作区工具）暴露给整个局域网。本 bundle **不改变任何授权行为**——它只是让客户端代码在非安全源上可以运行。信任围栏（`--trusted-host`、局域网字面量自动检测）依然原样生效。请仅在受信任的网络上使用。
+
+## 许可证
+
+MIT
