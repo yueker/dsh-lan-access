@@ -2,7 +2,12 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profile bundle that makes the Web GUI work over **plain-http LAN IPs** (insecure browser contexts).
+A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profile bundle that makes the Web GUI work over **plain-http LAN IPs** (insecure browser contexts), and optionally lets the privileged settings / presets pages work from LAN hosts.
+
+## Features
+
+1. **`crypto.randomUUID` polyfill** (always on) — fixes the Web GUI hanging over a LAN IP.
+2. **`allowPrivilegedFromLan`** (opt-in) — lets the 设置 → 通用设置 (Agent presets & permissions, settings, credentials) pages work from LAN devices, which DSH otherwise pins to loopback by design.
 
 ## Problem
 
@@ -39,6 +44,21 @@ mkdir -p ~/.dsh/profiles/web/node_modules
 ln -s "$PWD" ~/.dsh/profiles/web/node_modules/dsh-lan-access
 # add "dsh-lan-access" to "dsh.profile.bundles" in ~/.dsh/profiles/web/package.json
 ```
+
+## Privileged methods from LAN (opt-in)
+
+DSH gates a set of privileged methods — `settings.*`, `credentials.*`, `agentPreset.*`, `host.pickDirectory`, `host.openPath`, `llm.discoverModels` — to loopback by design (the LAN trust fence is explicitly **not** authentication). The settings / agent-preset / permissions pages therefore return `403` from LAN devices.
+
+To enable them from LAN, add the config to the plugin row in your profile patch:
+
+```yaml
+# ~/.dsh/profiles/web/cordis.patch.yml
+- id: secure-context-polyfill
+  config:
+    allowPrivilegedFromLan: true
+```
+
+> ⚠️ **Security**: this intentionally weakens DSH's loopback pin for privileged methods. Only the ordinary LAN trust fence (`--trusted-host`, auto-detected LAN IPs) remains. Use on trusted networks only.
 
 ## Verify
 

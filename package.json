@@ -1,7 +1,7 @@
 {
   "name": "dsh-lan-access",
-  "version": "1.0.0",
-  "description": "DSH web profile bundle: enables the Web GUI over plain-http LAN IPs (insecure contexts) by polyfilling crypto.randomUUID, which Chrome omits there and which the client connection handshake otherwise requires — fixing the infinite \"connection lost, retry\" loop and a stuck welcome screen.",
+  "version": "1.1.0",
+  "description": "DSH web profile bundle: makes the Web GUI work over plain-http LAN IPs (polyfills crypto.randomUUID) and optionally lets privileged settings/preset methods work from LAN hosts (allowPrivilegedFromLan).",
   "type": "module",
   "main": "lib/index.mjs",
   "exports": {

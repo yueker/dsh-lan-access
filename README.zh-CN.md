@@ -2,7 +2,12 @@
 
 [English](README.md) | **简体中文**
 
-一个 [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) Web 配置（profile）bundle，让 Web GUI 能通过 **纯 HTTP 局域网 IP**（非安全上下文）正常使用。
+一个 [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) Web 配置（profile）bundle，让 Web GUI 能通过 **纯 HTTP 局域网 IP**（非安全上下文）正常使用，并可选择性地让设置/预设等特权页面在局域网设备上可用。
+
+## 功能
+
+1. **`crypto.randomUUID` polyfill**（默认启用）—— 修复局域网 IP 访问时 Web GUI 卡死的问题。
+2. **`allowPrivilegedFromLan`**（可选开启）—— 让 设置 → 通用设置（Agent 预设与权限、设置、凭据）页面在局域网设备上可用（DSH 默认把这些方法限制在回环地址）。
 
 ## 问题
 
@@ -39,6 +44,21 @@ mkdir -p ~/.dsh/profiles/web/node_modules
 ln -s "$PWD" ~/.dsh/profiles/web/node_modules/dsh-lan-access
 # 在 ~/.dsh/profiles/web/package.json 的 "dsh.profile.bundles" 中加入 "dsh-lan-access"
 ```
+
+## 局域网使用特权方法（可选开启）
+
+DSH 出于设计把一组特权方法——`settings.*`、`credentials.*`、`agentPreset.*`、`host.pickDirectory`、`host.openPath`、`llm.discoverModels`——限制在回环地址（局域网信任围栏明确**不是**认证）。因此设置/Agent 预设/权限页面从局域网设备访问会返回 `403`。
+
+要在局域网启用，请在 profile patch 中给插件行加配置：
+
+```yaml
+# ~/.dsh/profiles/web/cordis.patch.yml
+- id: secure-context-polyfill
+  config:
+    allowPrivilegedFromLan: true
+```
+
+> ⚠️ **安全提示**：这会有意削弱 DSH 对特权方法的回环限制，仅剩普通的局域网信任围栏（`--trusted-host`、自动检测的局域网 IP）。请仅在受信任的网络上使用。
 
 ## 验证
 
