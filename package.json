@@ -1,0 +1,35 @@
+{
+  "name": "dsh-lan-access",
+  "version": "1.0.0",
+  "description": "DSH web profile bundle: enables the Web GUI over plain-http LAN IPs (insecure contexts) by polyfilling crypto.randomUUID, which Chrome omits there and which the client connection handshake otherwise requires — fixing the infinite \"connection lost, retry\" loop and a stuck welcome screen.",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "test": "node --check lib/index.mjs && node --input-type=module -e \"import('./lib/index.mjs').then(m => { if (m.name !== 'secure-context-polyfill') throw new Error('bad name'); if (typeof m.apply !== 'function') throw new Error('bad apply'); console.log('plugin exports OK'); })\""
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "bundle",
+    "lan-access",
+    "polyfill",
+    "secure-context",
+    "randomuuid"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

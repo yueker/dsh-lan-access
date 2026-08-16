@@ -1,0 +1,12 @@
+# dsh-lan-access bundle patch — applied after dsh-web-app.
+#
+# Inserts one host row that injects a crypto.randomUUID polyfill into every
+# served index.html. Without it, the Web GUI accessed over a plain-http LAN IP
+# (insecure context) never connects: Chrome omits crypto.randomUUID there and
+# the client connection handshake (AbstractApiClient.mintRpcId) rejects before
+# sending any request, leaving the UI stuck in an infinite
+# "connection lost, retry #N" loop with no sessions or workspace visible.
+- insert:
+    - id: secure-context-polyfill
+      name: 'dsh-lan-access'
+      inject: [webServer]
