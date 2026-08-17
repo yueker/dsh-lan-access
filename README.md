@@ -63,23 +63,28 @@ To enable them from LAN, add the config to the plugin row in your profile patch:
 
 ## Password authentication (opt-in)
 
-DSH ships **no** web authentication ("until a real authentication layer exists"). When the GUI is reachable from other devices, anyone on the network can use it. To add a simple password gate, set `authPassword`:
+DSH ships **no** web authentication ("until a real authentication layer exists"). When the GUI is reachable from other devices, anyone on the network can use it. To add a password gate, set `authEnabled`:
 
 ```yaml
 # ~/.dsh/profiles/web/cordis.patch.yml
 - id: secure-context-polyfill
   config:
-    authPassword: 'your-password'
+    authEnabled: true
 ```
 
-What it does:
+**First use**: the first visitor sees a "create password" screen. The password is stored salted (scrypt) at `$DSH_HOME/lan-access-password.json` (mode 0600) and survives restarts.
+
+**Every later visit**: a login screen. After signing in, a "修改密码 / change password" button appears at the bottom-right corner of the page to change the password from the web UI (all other sessions are invalidated on change).
+
+Alternatively, pin a fixed password in the profile config with `authPassword: '...'` (then the change-password UI is disabled; edit the config instead).
+
+What the gate covers:
 
 - every `/api` request (HTTP and WebSocket, including the event streams) requires a session cookie; unauthenticated requests get `401` / the WebSocket upgrade is rejected
-- an injected client script shows a login overlay on first load; after a successful login the page reloads and works normally
 - sessions are `HttpOnly` + `SameSite=Strict` cookies with an in-memory token store (12 h TTL, lost on restart)
-- endpoints: `POST /api/__lan_auth.login` `{ "password": ... }`, `POST /api/__lan_auth.logout`
+- endpoints: `POST /api/__lan_auth.status`, `POST /api/__lan_auth.setup` (first-use only), `POST /api/__lan_auth.login`, `POST /api/__lan_auth.logout`, `POST /api/__lan_auth.changePassword` (signed-in)
 
-> ⚠️ **Security**: this is a convenience gate for trusted LANs, **not** a hardened boundary. Credentials and the session cookie travel over plain HTTP (no TLS), the password is shared by everyone, and brute-force is only lightly throttled. For stronger protection run DSH behind a TLS reverse proxy with real authentication.
+> ⚠️ **Security**: this is a convenience gate for trusted LANs, **not** a hardened boundary. Credentials and the session cookie travel over plain HTTP (no TLS), the password is shared by everyone granted access, and brute-force is only lightly throttled. For stronger protection run DSH behind a TLS reverse proxy with real authentication.
 
 ## Verify
 

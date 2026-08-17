@@ -1,7 +1,7 @@
 {
   "name": "dsh-lan-access",
-  "version": "1.2.0",
-  "description": "DSH web profile bundle: makes the Web GUI work over plain-http LAN IPs (polyfills crypto.randomUUID), optionally lets privileged settings/preset methods work from LAN hosts (allowPrivilegedFromLan), and adds an opt-in password gate for the whole /api plane (authPassword).",
+  "version": "1.3.0",
+  "description": "DSH web profile bundle: makes the Web GUI work over plain-http LAN IPs (polyfills crypto.randomUUID), optionally lets privileged settings/preset methods work from LAN hosts (allowPrivilegedFromLan), and adds an opt-in password gate with first-use setup and in-web password change (authEnabled).",
   "type": "module",
   "main": "lib/index.mjs",
   "exports": {

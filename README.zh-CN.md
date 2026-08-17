@@ -63,23 +63,28 @@ DSH 出于设计把一组特权方法——`settings.*`、`credentials.*`、`age
 
 ## 密码鉴权（可选开启）
 
-DSH **没有**内置 Web 认证（官方注释："until a real authentication layer exists"——在真正认证层出现之前）。当 GUI 可以被其他设备访问时，网络上任何人都能使用。要加一层简单的密码门禁，设置 `authPassword`：
+DSH **没有**内置 Web 认证（官方注释："until a real authentication layer exists"——在真正认证层出现之前）。当 GUI 可以被其他设备访问时，网络上任何人都能使用。要加密码门禁，设置 `authEnabled`：
 
 ```yaml
 # ~/.dsh/profiles/web/cordis.patch.yml
 - id: secure-context-polyfill
   config:
-    authPassword: '你的密码'
+    authEnabled: true
 ```
 
-功能说明：
+**首次使用**：第一个访问者会看到"设置访问密码"界面。密码以加盐（scrypt）形式存储在 `$DSH_HOME/lan-access-password.json`（权限 0600），重启后依然有效。
+
+**之后每次访问**：显示登录界面。登录后页面右下角会出现"修改密码"按钮，可在网页上直接修改密码（修改后其他已登录设备需重新登录）。
+
+也可以选择在配置中固定密码：`authPassword: '...'`（此时网页修改密码不可用，需改配置）。
+
+鉴权覆盖范围：
 
 - 所有 `/api` 请求（HTTP 和 WebSocket，包括事件流）都需要会话 cookie；未认证请求返回 `401` / WebSocket 升级被拒绝
-- 注入的客户端脚本在首次加载时显示登录界面；登录成功后页面自动刷新并正常使用
 - 会话使用 `HttpOnly` + `SameSite=Strict` cookie，token 存储在内存（12 小时有效期，重启后失效）
-- 接口：`POST /api/__lan_auth.login`（body `{ "password": ... }`）、`POST /api/__lan_auth.logout`
+- 接口：`POST /api/__lan_auth.status`、`POST /api/__lan_auth.setup`（仅首次）、`POST /api/__lan_auth.login`、`POST /api/__lan_auth.logout`、`POST /api/__lan_auth.changePassword`（需已登录）
 
-> ⚠️ **安全提示**：这是面向受信任局域网的便利性门禁，**不是**加固的安全边界。密码和会话 cookie 通过纯 HTTP 明文传输（无 TLS）、密码为所有人共享、且对暴力破解只有很轻的限制。需要更强保护时，请在 DSH 前面加 TLS 反向代理并配合真正的认证方案。
+> ⚠️ **安全提示**：这是面向受信任局域网的便利性门禁，**不是**加固的安全边界。密码和会话 cookie 通过纯 HTTP 明文传输（无 TLS）、密码为所有被授权者共享、对暴力破解只有很轻的限制。需要更强保护时，请在 DSH 前面加 TLS 反向代理并配合真正的认证方案。
 
 ## 验证
 
