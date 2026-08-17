@@ -8,7 +8,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profil
 
 1. **`crypto.randomUUID` polyfill** (always on) — fixes the Web GUI hanging over a LAN IP.
 2. **`allowPrivilegedFromLan`** (opt-in) — lets the 设置 → 通用设置 (Agent presets & permissions, settings, credentials) pages work from LAN devices, which DSH otherwise pins to loopback by design.
-3. **`authPassword`** (opt-in) — password gate for the whole `/api` plane (HTTP + WebSocket) with an injected login overlay; DSH ships no web authentication.
+3. **`authEnabled`** (opt-in) — password gate for the whole `/api` plane (HTTP + WebSocket) with first-use password setup and in-web password change; DSH ships no web authentication.
 
 ## Problem
 
@@ -28,23 +28,130 @@ This bundle injects a tiny `<script>` into every served `index.html` (via the `w
 
 ## Install
 
-Requires `pnpm` (for `dsh plugin`) and the `web` profile:
+### Prerequisites
+
+- DSH with the `web` profile already booted at least once (the profile lives in `~/.dsh/profiles/web/`, or `$DSH_HOME/profiles/web/` if `DSH_HOME` is set).
+- `git` and network access to GitHub (to fetch the plugin).
+- A terminal on the machine running DSH.
+
+All commands below are for Linux / macOS. On Windows (PowerShell), replace `ln -s <target> <link>` with `New-Item -ItemType SymbolicLink -Path <link> -Target <target>` (run as administrator or enable Developer Mode), and the paths use `%USERPROFILE%\.dsh\...`.
+
+### Step 1 — Get the plugin
+
+Clone the repository (or download the repo as a ZIP from GitHub and extract it):
 
 ```bash
-# install the package into the web profile (adds it to dsh.profile.bundles automatically)
-dsh plugin --profile web add dsh-lan-access
-
-# restart the web app
-dsh web
+git clone https://github.com/yueker/dsh-lan-access.git ~/dsh-lan-access
 ```
 
-Offline / manual install (no pnpm): clone or download this repo, then
+> No `git`? Download `dsh-lan-access` from the GitHub page (**Code → Download ZIP**), extract it, and use the extracted folder path in Step 2 (note: a ZIP extracts to `dsh-lan-access-main`).
+
+### Step 2 — Put the plugin where the web profile can load it
 
 ```bash
 mkdir -p ~/.dsh/profiles/web/node_modules
-ln -s "$PWD" ~/.dsh/profiles/web/node_modules/dsh-lan-access
-# add "dsh-lan-access" to "dsh.profile.bundles" in ~/.dsh/profiles/web/package.json
+ln -s ~/dsh-lan-access ~/.dsh/profiles/web/node_modules/dsh-lan-access
 ```
+
+Verify the link exists:
+
+```bash
+ls -l ~/.dsh/profiles/web/node_modules/
+# dsh-lan-access -> /home/<you>/dsh-lan-access
+```
+
+> If you extracted a ZIP instead, the target folder is `dsh-lan-access-main`:
+> `ln -s ~/dsh-lan-access-main ~/.dsh/profiles/web/node_modules/dsh-lan-access`
+
+### Step 3 — Register the plugin as a profile bundle
+
+Edit `~/.dsh/profiles/web/package.json`:
+
+1. add `"dsh-lan-access": "file:./node_modules/dsh-lan-access"` to the `dependencies` object;
+2. append `"dsh-lan-access"` to the `dsh.profile.bundles` array (after `@deepseek-ai/dsh-web-app`).
+
+Complete example (keep any entries your profile already has):
+
+```json
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": {
+    "dsh-lan-access": "file:./node_modules/dsh-lan-access"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-lan-access"
+      ]
+    }
+  }
+}
+```
+
+### Step 4 — Configure the profile patch
+
+Edit `~/.dsh/profiles/web/cordis.patch.yml`:
+
+```yaml
+# 1) Bind the Web server to all interfaces so LAN devices can reach it.
+- id: webserver
+  config:
+    host: '0.0.0.0'
+    port: 3080
+
+# 2) Enable the plugin's LAN fixes.
+- id: secure-context-polyfill
+  config:
+    allowPrivilegedFromLan: true   # optional: settings/presets pages from LAN
+    authEnabled: true              # optional: password gate (set on first use)
+```
+
+- `host: '0.0.0.0'` is required for LAN access. Pick any free `port`.
+- `allowPrivilegedFromLan` and `authEnabled` are optional — read the [Privileged methods from LAN](#privileged-methods-from-lan-opt-in) and [Password authentication](#password-authentication-opt-in) sections before enabling them.
+
+### Step 5 — Restart the web app
+
+In the terminal that is running `dsh web`, press `Ctrl+C`, then start it again:
+
+```bash
+dsh web
+```
+
+### Step 6 — Verify
+
+On the server:
+
+```bash
+curl -s http://127.0.0.1:3080/ | grep -c randomUUID   # ≥ 2 = polyfill injected
+```
+
+From another device on the same network, open `http://<server-lan-ip>:3080` and hard-refresh (`Ctrl+Shift+R`). With `authEnabled: true`, the first visitor sees the **create-password** screen.
+
+### Alternative install: `dsh plugin` (requires pnpm)
+
+If pnpm is installed, `dsh plugin` installs and registers the bundle in one step:
+
+```bash
+# once the package is published to an npm registry:
+dsh plugin --profile web add dsh-lan-access
+
+# or directly from a local checkout of this repository:
+dsh plugin --profile web add /path/to/dsh-lan-access
+
+dsh web
+```
+
+### Updating
+
+```bash
+cd ~/dsh-lan-access && git pull
+# then restart dsh web (Ctrl+C, then dsh web)
+```
+
+(This works for the symlink install. If you copied the folder instead of symlinking, re-copy the updated folder over it.)
 
 ## Privileged methods from LAN (opt-in)
 
@@ -101,9 +208,9 @@ Then open `http://<your-lan-ip>:3080` from another device and hard-refresh (`Ctr
 | Component | Role |
 |---|---|
 | `cordis.patch.yml` | bundle patch — inserts one host row (`secure-context-polyfill`) |
-| `lib/index.mjs` | the plugin — registers an index tap on `ctx.webServer` |
+| `lib/index.mjs` | the plugin — index tap (polyfill + auth client) and `/api` handler wraps (privileged LAN bypass, auth gate) |
 
-The plugin declares `inject: [webServer]` and uses `ctx.webServer.tapIndex()` to transform every served `index.html`, inserting the polyfill right after `<head>` — before any app bundle runs.
+The plugin declares `inject: [webServer]` and uses `ctx.webServer.tapIndex()` to transform every served `index.html`, inserting the polyfill right after `<head>` — before any app bundle runs. The optional `allowPrivilegedFromLan` and `authEnabled` features wrap the registered `/api` route handler and the WebSocket upgrade routes, so the auth gate and the loopback re-targeting sit in front of DSH's own pipeline.
 
 ## Security note
 

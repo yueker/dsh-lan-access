@@ -8,7 +8,7 @@
 
 1. **`crypto.randomUUID` polyfill**（默认启用）—— 修复局域网 IP 访问时 Web GUI 卡死的问题。
 2. **`allowPrivilegedFromLan`**（可选开启）—— 让 设置 → 通用设置（Agent 预设与权限、设置、凭据）页面在局域网设备上可用（DSH 默认把这些方法限制在回环地址）。
-3. **`authPassword`**（可选开启）—— 为整个 `/api` 平面（HTTP + WebSocket）加密码门禁，并注入登录界面；DSH 本身没有 Web 认证。
+3. **`authEnabled`**（可选开启）—— 为整个 `/api` 平面（HTTP + WebSocket）加密码门禁，支持首次使用设置密码和网页修改密码；DSH 本身没有 Web 认证。
 
 ## 问题
 
@@ -28,23 +28,130 @@ DSH Web GUI 在客户端连接握手中使用 `crypto.randomUUID()`（Chrome 中
 
 ## 安装
 
-需要 `pnpm`（供 `dsh plugin` 使用）和 `web` profile：
+### 前置条件
+
+- DSH 的 `web` profile 至少启动过一次（profile 位于 `~/.dsh/profiles/web/`，若设置了 `DSH_HOME` 则在 `$DSH_HOME/profiles/web/`）。
+- 装有 `git` 且能访问 GitHub（用于获取插件）。
+- 能操作运行 DSH 的服务器终端。
+
+以下命令适用于 Linux / macOS。Windows（PowerShell）用户请把 `ln -s <目标> <链接>` 换成 `New-Item -ItemType SymbolicLink -Path <链接> -Target <目标>`（需管理员或开启开发者模式），路径中的 `~/.dsh` 换成 `%USERPROFILE%\.dsh`。
+
+### 第 1 步 — 获取插件
+
+克隆仓库（或在 GitHub 页面 **Code → Download ZIP** 下载并解压）：
 
 ```bash
-# 将包安装到 web profile（会自动加入 dsh.profile.bundles）
-dsh plugin --profile web add dsh-lan-access
-
-# 重启 web 应用
-dsh web
+git clone https://github.com/yueker/dsh-lan-access.git ~/dsh-lan-access
 ```
 
-离线/手动安装（无 pnpm）：克隆或下载本仓库，然后
+> 没有 `git`？在 GitHub 页面下载 ZIP 并解压，解压出的目录名是 `dsh-lan-access-main`，第 2 步用它作为目标路径即可。
+
+### 第 2 步 — 把插件放到 web profile 可加载的位置
 
 ```bash
 mkdir -p ~/.dsh/profiles/web/node_modules
-ln -s "$PWD" ~/.dsh/profiles/web/node_modules/dsh-lan-access
-# 在 ~/.dsh/profiles/web/package.json 的 "dsh.profile.bundles" 中加入 "dsh-lan-access"
+ln -s ~/dsh-lan-access ~/.dsh/profiles/web/node_modules/dsh-lan-access
 ```
+
+确认链接已创建：
+
+```bash
+ls -l ~/.dsh/profiles/web/node_modules/
+# dsh-lan-access -> /home/<你>/dsh-lan-access
+```
+
+> 如果用 ZIP 解压，目标目录是 `dsh-lan-access-main`：
+> `ln -s ~/dsh-lan-access-main ~/.dsh/profiles/web/node_modules/dsh-lan-access`
+
+### 第 3 步 — 把插件注册为 profile bundle
+
+编辑 `~/.dsh/profiles/web/package.json`：
+
+1. 在 `dependencies` 中加入 `"dsh-lan-access": "file:./node_modules/dsh-lan-access"`；
+2. 在 `dsh.profile.bundles` 数组末尾（`@deepseek-ai/dsh-web-app` 之后）追加 `"dsh-lan-access"`。
+
+完整示例（保留你 profile 里已有的条目）：
+
+```json
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": {
+    "dsh-lan-access": "file:./node_modules/dsh-lan-access"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-lan-access"
+      ]
+    }
+  }
+}
+```
+
+### 第 4 步 — 配置 profile patch
+
+编辑 `~/.dsh/profiles/web/cordis.patch.yml`：
+
+```yaml
+# 1) 把 Web 服务器绑定到所有网卡，让局域网设备能访问
+- id: webserver
+  config:
+    host: '0.0.0.0'
+    port: 3080
+
+# 2) 启用插件的局域网修复
+- id: secure-context-polyfill
+  config:
+    allowPrivilegedFromLan: true   # 可选：让设置/预设页面在局域网可用
+    authEnabled: true              # 可选：密码门禁（首次使用设置密码）
+```
+
+- `host: '0.0.0.0'` 是局域网访问所必需的。`port` 选一个空闲端口即可。
+- `allowPrivilegedFromLan` 和 `authEnabled` 都是可选的——启用前请先阅读下方[局域网使用特权方法](#局域网使用特权方法可选开启)和[密码鉴权](#密码鉴权可选开启)两节。
+
+### 第 5 步 — 重启 web 应用
+
+在运行 `dsh web` 的终端按 `Ctrl+C` 停止，然后重新启动：
+
+```bash
+dsh web
+```
+
+### 第 6 步 — 验证
+
+在服务器上：
+
+```bash
+curl -s http://127.0.0.1:3080/ | grep -c randomUUID   # ≥ 2 表示 polyfill 已注入
+```
+
+从同一局域网的其他设备打开 `http://<服务器局域网IP>:3080` 并强制刷新（`Ctrl+Shift+R`）。如果开启了 `authEnabled: true`，第一个访问者会看到"设置访问密码"界面。
+
+### 备选安装方式：`dsh plugin`（需要 pnpm）
+
+如果安装了 pnpm，`dsh plugin` 可以一步完成安装和注册：
+
+```bash
+# 包发布到 npm 仓库后：
+dsh plugin --profile web add dsh-lan-access
+
+# 或直接从本仓库的本地目录安装：
+dsh plugin --profile web add /path/to/dsh-lan-access
+
+dsh web
+```
+
+### 更新
+
+```bash
+cd ~/dsh-lan-access && git pull
+# 然后重启 dsh web（Ctrl+C，再 dsh web）
+```
+
+（适用于 symlink 安装方式；如果是复制安装，把更新后的目录重新复制覆盖即可。）
 
 ## 局域网使用特权方法（可选开启）
 
@@ -101,9 +208,9 @@ curl -s http://127.0.0.1:3080/ | grep -c randomUUID   # ≥ 2 表示 polyfill �
 | 组件 | 作用 |
 |---|---|
 | `cordis.patch.yml` | bundle patch —— 插入一个 host 行（`secure-context-polyfill`） |
-| `lib/index.mjs` | 插件本体 —— 在 `ctx.webServer` 上注册 index-tap |
+| `lib/index.mjs` | 插件本体 —— index-tap（polyfill + 鉴权客户端）和 `/api` handler 包装（特权局域网放行、鉴权门禁） |
 
-插件声明 `inject: [webServer]`，用 `ctx.webServer.tapIndex()` 转换每个被服务的 `index.html`，在 `<head>` 之后（任何应用 bundle 运行之前）插入 polyfill。
+插件声明 `inject: [webServer]`，用 `ctx.webServer.tapIndex()` 转换每个被服务的 `index.html`，在 `<head>` 之后（任何应用 bundle 运行之前）插入 polyfill。可选的 `allowPrivilegedFromLan` 和 `authEnabled` 功能会包装已注册的 `/api` 路由 handler 和 WebSocket 升级路由，让鉴权门禁和回环重定向位于 DSH 自身处理链路之前。
 
 ## 安全提示
 
