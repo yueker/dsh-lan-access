@@ -8,6 +8,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profil
 
 1. **`crypto.randomUUID` polyfill** (always on) — fixes the Web GUI hanging over a LAN IP.
 2. **`allowPrivilegedFromLan`** (opt-in) — lets the 设置 → 通用设置 (Agent presets & permissions, settings, credentials) pages work from LAN devices, which DSH otherwise pins to loopback by design.
+3. **`authPassword`** (opt-in) — password gate for the whole `/api` plane (HTTP + WebSocket) with an injected login overlay; DSH ships no web authentication.
 
 ## Problem
 
@@ -59,6 +60,26 @@ To enable them from LAN, add the config to the plugin row in your profile patch:
 ```
 
 > ⚠️ **Security**: this intentionally weakens DSH's loopback pin for privileged methods. Only the ordinary LAN trust fence (`--trusted-host`, auto-detected LAN IPs) remains. Use on trusted networks only.
+
+## Password authentication (opt-in)
+
+DSH ships **no** web authentication ("until a real authentication layer exists"). When the GUI is reachable from other devices, anyone on the network can use it. To add a simple password gate, set `authPassword`:
+
+```yaml
+# ~/.dsh/profiles/web/cordis.patch.yml
+- id: secure-context-polyfill
+  config:
+    authPassword: 'your-password'
+```
+
+What it does:
+
+- every `/api` request (HTTP and WebSocket, including the event streams) requires a session cookie; unauthenticated requests get `401` / the WebSocket upgrade is rejected
+- an injected client script shows a login overlay on first load; after a successful login the page reloads and works normally
+- sessions are `HttpOnly` + `SameSite=Strict` cookies with an in-memory token store (12 h TTL, lost on restart)
+- endpoints: `POST /api/__lan_auth.login` `{ "password": ... }`, `POST /api/__lan_auth.logout`
+
+> ⚠️ **Security**: this is a convenience gate for trusted LANs, **not** a hardened boundary. Credentials and the session cookie travel over plain HTTP (no TLS), the password is shared by everyone, and brute-force is only lightly throttled. For stronger protection run DSH behind a TLS reverse proxy with real authentication.
 
 ## Verify
 

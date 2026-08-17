@@ -8,6 +8,7 @@
 
 1. **`crypto.randomUUID` polyfill**（默认启用）—— 修复局域网 IP 访问时 Web GUI 卡死的问题。
 2. **`allowPrivilegedFromLan`**（可选开启）—— 让 设置 → 通用设置（Agent 预设与权限、设置、凭据）页面在局域网设备上可用（DSH 默认把这些方法限制在回环地址）。
+3. **`authPassword`**（可选开启）—— 为整个 `/api` 平面（HTTP + WebSocket）加密码门禁，并注入登录界面；DSH 本身没有 Web 认证。
 
 ## 问题
 
@@ -59,6 +60,26 @@ DSH 出于设计把一组特权方法——`settings.*`、`credentials.*`、`age
 ```
 
 > ⚠️ **安全提示**：这会有意削弱 DSH 对特权方法的回环限制，仅剩普通的局域网信任围栏（`--trusted-host`、自动检测的局域网 IP）。请仅在受信任的网络上使用。
+
+## 密码鉴权（可选开启）
+
+DSH **没有**内置 Web 认证（官方注释："until a real authentication layer exists"——在真正认证层出现之前）。当 GUI 可以被其他设备访问时，网络上任何人都能使用。要加一层简单的密码门禁，设置 `authPassword`：
+
+```yaml
+# ~/.dsh/profiles/web/cordis.patch.yml
+- id: secure-context-polyfill
+  config:
+    authPassword: '你的密码'
+```
+
+功能说明：
+
+- 所有 `/api` 请求（HTTP 和 WebSocket，包括事件流）都需要会话 cookie；未认证请求返回 `401` / WebSocket 升级被拒绝
+- 注入的客户端脚本在首次加载时显示登录界面；登录成功后页面自动刷新并正常使用
+- 会话使用 `HttpOnly` + `SameSite=Strict` cookie，token 存储在内存（12 小时有效期，重启后失效）
+- 接口：`POST /api/__lan_auth.login`（body `{ "password": ... }`）、`POST /api/__lan_auth.logout`
+
+> ⚠️ **安全提示**：这是面向受信任局域网的便利性门禁，**不是**加固的安全边界。密码和会话 cookie 通过纯 HTTP 明文传输（无 TLS）、密码为所有人共享、且对暴力破解只有很轻的限制。需要更强保护时，请在 DSH 前面加 TLS 反向代理并配合真正的认证方案。
 
 ## 验证
 
