@@ -188,7 +188,7 @@ Alternatively, pin a fixed password in the profile config with `authPassword: '.
 What the gate covers:
 
 - every `/api` request (HTTP and WebSocket, including the event streams) requires a session cookie; unauthenticated requests get `401` / the WebSocket upgrade is rejected
-- sessions are `HttpOnly` + `SameSite=Strict` cookies with an in-memory token store (12 h TTL, lost on restart)
+- sessions are `HttpOnly` + `SameSite=Strict` cookies backed by a token store persisted under `$DSH_HOME/lan-access-sessions.json` (12 h TTL, only SHA-256 token hashes stored, survives restarts)
 - endpoints: `POST /api/__lan_auth.status`, `POST /api/__lan_auth.setup` (first-use only), `POST /api/__lan_auth.login`, `POST /api/__lan_auth.logout`, `POST /api/__lan_auth.changePassword` (signed-in)
 
 > ⚠️ **Security**: this is a convenience gate for trusted LANs, **not** a hardened boundary. Credentials and the session cookie travel over plain HTTP (no TLS), the password is shared by everyone granted access, and brute-force is only lightly throttled. For stronger protection run DSH behind a TLS reverse proxy with real authentication.

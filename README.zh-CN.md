@@ -188,7 +188,7 @@ DSH **没有**内置 Web 认证（官方注释："until a real authentication la
 鉴权覆盖范围：
 
 - 所有 `/api` 请求（HTTP 和 WebSocket，包括事件流）都需要会话 cookie；未认证请求返回 `401` / WebSocket 升级被拒绝
-- 会话使用 `HttpOnly` + `SameSite=Strict` cookie，token 存储在内存（12 小时有效期，重启后失效）
+- 会话使用 `HttpOnly` + `SameSite=Strict` cookie，token 存储在 `$DSH_HOME/lan-access-sessions.json`（12 小时有效期，仅保存 SHA-256 哈希，重启后仍然有效）
 - 接口：`POST /api/__lan_auth.status`、`POST /api/__lan_auth.setup`（仅首次）、`POST /api/__lan_auth.login`、`POST /api/__lan_auth.logout`、`POST /api/__lan_auth.changePassword`（需已登录）
 
 > ⚠️ **安全提示**：这是面向受信任局域网的便利性门禁，**不是**加固的安全边界。密码和会话 cookie 通过纯 HTTP 明文传输（无 TLS）、密码为所有被授权者共享、对暴力破解只有很轻的限制。需要更强保护时，请在 DSH 前面加 TLS 反向代理并配合真正的认证方案。
