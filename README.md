@@ -181,13 +181,13 @@ DSH ships **no** web authentication ("until a real authentication layer exists")
 
 **First use**: the first visitor sees a "create password" screen. The password is stored salted (scrypt) at `$DSH_HOME/lan-access-password.json` (mode 0600) and survives restarts.
 
-**Every later visit**: a login screen. After signing in, a "修改密码 / change password" button appears at the bottom-right corner of the page to change the password from the web UI (all other sessions are invalidated on change).
+**Every later LAN visit**: a login screen. The GUI intentionally has no floating change-password button; change a setup-managed password by removing `$DSH_HOME/lan-access-password.json` and restarting for first-use setup, or pin a replacement with `authPassword: '...'` in the profile config.
 
-Alternatively, pin a fixed password in the profile config with `authPassword: '...'` (then the change-password UI is disabled; edit the config instead).
+**Loopback access** (`127.0.0.1`, `::1`, or IPv4-mapped loopback) bypasses the password gate based on the actual TCP peer address. Forwarding headers are never trusted. This preserves DSH's local privileged-authority behavior while LAN peers remain authenticated.
 
 What the gate covers:
 
-- every `/api` request (HTTP and WebSocket, including the event streams) requires a session cookie; unauthenticated requests get `401` / the WebSocket upgrade is rejected
+- every `/api` request (HTTP and WebSocket, including the event streams) from a non-loopback peer requires a session cookie; unauthenticated requests get `401` / the WebSocket upgrade is rejected
 - sessions are `HttpOnly` + `SameSite=Strict` cookies backed by a token store persisted under `$DSH_HOME/lan-access-sessions.json` (12 h TTL, only SHA-256 token hashes stored, survives restarts)
 - endpoints: `POST /api/__lan_auth.status`, `POST /api/__lan_auth.setup` (first-use only), `POST /api/__lan_auth.login`, `POST /api/__lan_auth.logout`, `POST /api/__lan_auth.changePassword` (signed-in)
 

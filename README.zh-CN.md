@@ -181,13 +181,13 @@ DSH **没有**内置 Web 认证（官方注释："until a real authentication la
 
 **首次使用**：第一个访问者会看到"设置访问密码"界面。密码以加盐（scrypt）形式存储在 `$DSH_HOME/lan-access-password.json`（权限 0600），重启后依然有效。
 
-**之后每次访问**：显示登录界面。登录后页面右下角会出现"修改密码"按钮，可在网页上直接修改密码（修改后其他已登录设备需重新登录）。
+**之后每次局域网访问**：显示登录界面。GUI 有意不再显示右下角悬浮的“修改密码”按钮；要修改首次设置的密码，可删除 `$DSH_HOME/lan-access-password.json` 并重启以重新进入首次设置流程，或在 profile 配置中用 `authPassword: '...'` 固定新密码。
 
-也可以选择在配置中固定密码：`authPassword: '...'`（此时网页修改密码不可用，需改配置）。
+**回环访问**（`127.0.0.1`、`::1` 或 IPv4 映射回环地址）根据实际 TCP 对端地址免密码。插件绝不信任转发头；这样保留 DSH 本机特权权限语义，同时局域网对端仍需认证。
 
 鉴权覆盖范围：
 
-- 所有 `/api` 请求（HTTP 和 WebSocket，包括事件流）都需要会话 cookie；未认证请求返回 `401` / WebSocket 升级被拒绝
+- 所有来自非回环对端的 `/api` 请求（HTTP 和 WebSocket，包括事件流）都需要会话 cookie；未认证请求返回 `401` / WebSocket 升级被拒绝
 - 会话使用 `HttpOnly` + `SameSite=Strict` cookie，token 存储在 `$DSH_HOME/lan-access-sessions.json`（12 小时有效期，仅保存 SHA-256 哈希，重启后仍然有效）
 - 接口：`POST /api/__lan_auth.status`、`POST /api/__lan_auth.setup`（仅首次）、`POST /api/__lan_auth.login`、`POST /api/__lan_auth.logout`、`POST /api/__lan_auth.changePassword`（需已登录）
 
