@@ -2,12 +2,12 @@
 
 [English](README.md) | **简体中文**
 
-一个 [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) Web 配置（profile）bundle，让 Web GUI 能通过 **纯 HTTP 局域网 IP**（非安全上下文）正常使用，并可选择性地让设置/预设等特权页面在局域网设备上可用。
+一个 [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) Web 配置（profile）bundle，让 Web GUI 能通过 **纯 HTTP 局域网 IP**（非安全上下文）正常使用，并可选择性地让完整的已认证 Web API 在受信任局域网设备上可用。
 
 ## 功能
 
 1. **`crypto.randomUUID` polyfill**（默认启用）—— 修复局域网 IP 访问时 Web GUI 卡死的问题。
-2. **`allowPrivilegedFromLan`**（可选开启）—— 让 设置 → 通用设置（Agent 预设与权限、设置、凭据）页面在局域网设备上可用（DSH 默认把这些方法限制在回环地址）。
+2. **`allowPrivilegedFromLan`**（可选开启）—— 将已认证局域网客户端的全部 `/api/*` HTTP 与 WebSocket 请求按 DSH 回环权限处理，不再维护容易漂移的方法白名单。
 3. **`authEnabled`**（可选开启）—— 为整个 `/api` 平面（HTTP + WebSocket）加密码门禁，支持首次使用设置密码和网页修改密码；DSH 本身没有 Web 认证。
 
 ## 问题
@@ -105,12 +105,12 @@ ls -l ~/.dsh/profiles/web/node_modules/
 # 2) 启用插件的局域网修复
 - id: secure-context-polyfill
   config:
-    allowPrivilegedFromLan: true   # 可选：让设置/预设页面在局域网可用
+    allowPrivilegedFromLan: true   # 可选：让完整已认证 API 在局域网可用
     authEnabled: true              # 可选：密码门禁（首次使用设置密码）
 ```
 
 - `host: '0.0.0.0'` 是局域网访问所必需的。`port` 选一个空闲端口即可。
-- `allowPrivilegedFromLan` 和 `authEnabled` 都是可选的——启用前请先阅读下方[局域网使用特权方法](#局域网使用特权方法可选开启)和[密码鉴权](#密码鉴权可选开启)两节。
+- `allowPrivilegedFromLan` 和 `authEnabled` 都是可选的——启用前请先阅读下方[局域网使用完整 API](#局域网使用完整-api可选开启)和[密码鉴权](#密码鉴权可选开启)两节。
 
 ### 第 5 步 — 重启 web 应用
 
@@ -153,20 +153,23 @@ cd ~/dsh-lan-access && git pull
 
 （适用于 symlink 安装方式；如果是复制安装，把更新后的目录重新复制覆盖即可。）
 
-## 局域网使用特权方法（可选开启）
+## 局域网使用完整 API（可选开启）
 
-DSH 出于设计把一组特权方法——`settings.*`、`credentials.*`、`agentPreset.*`、`host.pickDirectory`、`host.openPath`、`llm.discoverModels`——限制在回环地址（局域网信任围栏明确**不是**认证）。因此设置/Agent 预设/权限页面从局域网设备访问会返回 `403`。
+DSH 会把特权 API 操作限制在回环权限。实践表明，在插件里复制并维护一份方法白名单很容易随 DSH 新增接口而失效，例如模型提供方目录、Agent 预设列表、目录浏览以及会话事件流。
 
-要在局域网启用，请在 profile patch 中给插件行加配置：
+开启 `allowPrivilegedFromLan: true` 后，插件会把局域网客户端的**所有 `/api/*` 请求**按回环权限处理，同时覆盖普通 HTTP 调用和 WebSocket 升级（`/api/events.mux`、`/api/events.host`）：
 
 ```yaml
 # ~/.dsh/profiles/web/cordis.patch.yml
 - id: secure-context-polyfill
   config:
     allowPrivilegedFromLan: true
+    authEnabled: true
 ```
 
-> ⚠️ **安全提示**：这会有意削弱 DSH 对特权方法的回环限制，仅剩普通的局域网信任围栏（`--trusted-host`、自动检测的局域网 IP）。请仅在受信任的网络上使用。
+强烈建议同时开启 `authEnabled: true`：非回环客户端若未登录，会在回环重定向之前被拒绝。如果关闭鉴权，此选项将信任所有能访问 DSH 监听端口的客户端，因此只能用于受信任局域网。
+
+由于整个 API 采用统一处理，DSH 后续新增接口无需更新插件即可使用，会话与工作区事件也能通过 WebSocket 正常传递。
 
 ## 密码鉴权（可选开启）
 
@@ -208,13 +211,13 @@ curl -s http://127.0.0.1:3080/ | grep -c randomUUID   # ≥ 2 表示 polyfill �
 | 组件 | 作用 |
 |---|---|
 | `cordis.patch.yml` | bundle patch —— 插入一个 host 行（`secure-context-polyfill`） |
-| `lib/index.mjs` | 插件本体 —— index-tap（polyfill + 鉴权客户端）和 `/api` handler 包装（特权局域网放行、鉴权门禁） |
+| `lib/index.mjs` | 插件本体 —— index-tap（polyfill + 鉴权客户端）和 `/api` HTTP/WebSocket 包装（鉴权门禁 + 受信局域网回环重定向） |
 
 插件声明 `inject: [webServer]`，用 `ctx.webServer.tapIndex()` 转换每个被服务的 `index.html`，在 `<head>` 之后（任何应用 bundle 运行之前）插入 polyfill。可选的 `allowPrivilegedFromLan` 和 `authEnabled` 功能会包装已注册的 `/api` 路由 handler 和 WebSocket 升级路由，让鉴权门禁和回环重定向位于 DSH 自身处理链路之前。
 
 ## 安全提示
 
-将 DSH 绑定到 `0.0.0.0` 会把 GUI（包含 agent/工作区工具）暴露给整个局域网。本 bundle **不改变任何授权行为**——它只是让客户端代码在非安全源上可以运行。信任围栏（`--trusted-host`、局域网字面量自动检测）依然原样生效。请仅在受信任的网络上使用。
+将 DSH 绑定到 `0.0.0.0` 会把 GUI（包含 agent/工作区工具）暴露给整个局域网。当 `allowPrivilegedFromLan: false` 时，本 bundle 只修复非安全源客户端；开启后，已认证的 `/api/*` HTTP 与 WebSocket 流量会被有意按回环权限处理。请仅在受信任的网络上使用。
 
 ## 许可证
 

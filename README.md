@@ -2,12 +2,12 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profile bundle that makes the Web GUI work over **plain-http LAN IPs** (insecure browser contexts), and optionally lets the privileged settings / presets pages work from LAN hosts.
+A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) web-profile bundle that makes the Web GUI work over **plain-http LAN IPs** (insecure browser contexts), and optionally lets the full authenticated Web API work from trusted LAN hosts.
 
 ## Features
 
 1. **`crypto.randomUUID` polyfill** (always on) — fixes the Web GUI hanging over a LAN IP.
-2. **`allowPrivilegedFromLan`** (opt-in) — lets the 设置 → 通用设置 (Agent presets & permissions, settings, credentials) pages work from LAN devices, which DSH otherwise pins to loopback by design.
+2. **`allowPrivilegedFromLan`** (opt-in) — re-targets every authenticated LAN `/api/*` HTTP and WebSocket request to DSH's loopback authority, so the complete GUI works without a version-sensitive method allowlist.
 3. **`authEnabled`** (opt-in) — password gate for the whole `/api` plane (HTTP + WebSocket) with first-use password setup and in-web password change; DSH ships no web authentication.
 
 ## Problem
@@ -105,12 +105,12 @@ Edit `~/.dsh/profiles/web/cordis.patch.yml`:
 # 2) Enable the plugin's LAN fixes.
 - id: secure-context-polyfill
   config:
-    allowPrivilegedFromLan: true   # optional: settings/presets pages from LAN
+    allowPrivilegedFromLan: true   # optional: full authenticated API from LAN
     authEnabled: true              # optional: password gate (set on first use)
 ```
 
 - `host: '0.0.0.0'` is required for LAN access. Pick any free `port`.
-- `allowPrivilegedFromLan` and `authEnabled` are optional — read the [Privileged methods from LAN](#privileged-methods-from-lan-opt-in) and [Password authentication](#password-authentication-opt-in) sections before enabling them.
+- `allowPrivilegedFromLan` and `authEnabled` are optional — read the [Full API from LAN](#full-api-from-lan-opt-in) and [Password authentication](#password-authentication-opt-in) sections before enabling them.
 
 ### Step 5 — Restart the web app
 
@@ -153,20 +153,23 @@ cd ~/dsh-lan-access && git pull
 
 (This works for the symlink install. If you copied the folder instead of symlinking, re-copy the updated folder over it.)
 
-## Privileged methods from LAN (opt-in)
+## Full API from LAN (opt-in)
 
-DSH gates a set of privileged methods — `settings.*`, `credentials.*`, `agentPreset.*`, `host.pickDirectory`, `host.openPath`, `llm.discoverModels` — to loopback by design (the LAN trust fence is explicitly **not** authentication). The settings / agent-preset / permissions pages therefore return `403` from LAN devices.
+DSH pins privileged API operations to loopback authority. Maintaining a duplicated method allowlist in this plugin proved brittle as DSH added endpoints such as provider catalogs, Agent preset listing, directory browsing, and session event streams.
 
-To enable them from LAN, add the config to the plugin row in your profile patch:
+With `allowPrivilegedFromLan: true`, the plugin now re-targets **every `/api/*` request** from a LAN client to loopback authority, covering both unary HTTP calls and WebSocket upgrades (`/api/events.mux` and `/api/events.host`):
 
 ```yaml
 # ~/.dsh/profiles/web/cordis.patch.yml
 - id: secure-context-polyfill
   config:
     allowPrivilegedFromLan: true
+    authEnabled: true
 ```
 
-> ⚠️ **Security**: this intentionally weakens DSH's loopback pin for privileged methods. Only the ordinary LAN trust fence (`--trusted-host`, auto-detected LAN IPs) remains. Use on trusted networks only.
+Using `authEnabled: true` is strongly recommended: unauthenticated non-loopback clients are rejected before loopback re-targeting. If authentication is disabled, this option trusts every client that can reach the DSH listener. Use only on a trusted LAN.
+
+Because the entire API is handled uniformly, new DSH endpoints work without plugin updates and session/workspace events continue to flow over WebSocket.
 
 ## Password authentication (opt-in)
 
@@ -208,13 +211,13 @@ Then open `http://<your-lan-ip>:3080` from another device and hard-refresh (`Ctr
 | Component | Role |
 |---|---|
 | `cordis.patch.yml` | bundle patch — inserts one host row (`secure-context-polyfill`) |
-| `lib/index.mjs` | the plugin — index tap (polyfill + auth client) and `/api` handler wraps (privileged LAN bypass, auth gate) |
+| `lib/index.mjs` | the plugin — index tap (polyfill + auth client) and `/api` HTTP/WebSocket wrappers (auth gate + trusted-LAN loopback re-targeting) |
 
 The plugin declares `inject: [webServer]` and uses `ctx.webServer.tapIndex()` to transform every served `index.html`, inserting the polyfill right after `<head>` — before any app bundle runs. The optional `allowPrivilegedFromLan` and `authEnabled` features wrap the registered `/api` route handler and the WebSocket upgrade routes, so the auth gate and the loopback re-targeting sit in front of DSH's own pipeline.
 
 ## Security note
 
-Binding DSH to `0.0.0.0` exposes the GUI (which includes agent/workspace tooling) to your whole LAN. This bundle does **not** change any authorization behavior — it only makes the client code run on insecure origins. The trust fence (`--trusted-host`, LAN-literal auto-detection) still applies unchanged. Use on trusted networks only.
+Binding DSH to `0.0.0.0` exposes the GUI (which includes agent/workspace tooling) to your whole LAN. With `allowPrivilegedFromLan: false`, the bundle only fixes the insecure-origin client. With it enabled, authenticated `/api/*` HTTP and WebSocket traffic is intentionally treated as loopback-authority traffic. Use on trusted networks only.
 
 ## License
 
