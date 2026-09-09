@@ -1,6 +1,6 @@
 {
-  "name": "dsh-lan-access",
-  "version": "1.5.1",
+  "name": "@yueker/dsh-lan-access",
+  "version": "1.5.2",
   "description": "DSH web profile bundle: makes the Web GUI work over plain-http LAN IPs (polyfills crypto.randomUUID), optionally re-targets authenticated LAN API traffic to loopback authority (allowPrivilegedFromLan), and adds an opt-in password gate for LAN peers with first-use setup and loopback bypass (authEnabled).",
   "type": "module",
   "main": "lib/index.mjs",
