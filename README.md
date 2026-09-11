@@ -136,7 +136,7 @@ If pnpm is installed, `dsh plugin` installs and registers the bundle in one step
 
 ```bash
 # once the package is published to an npm registry:
-dsh plugin --profile web add dsh-lan-access
+dsh plugin --profile web add @yueker/dsh-lan-access
 
 # or directly from a local checkout of this repository:
 dsh plugin --profile web add /path/to/dsh-lan-access
