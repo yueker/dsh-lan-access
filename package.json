@@ -27,6 +27,14 @@
     "randomuuid"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yueker/dsh-lan-access"
+  },
+  "homepage": "https://github.com/yueker/dsh-lan-access#readme",
+  "bugs": {
+    "url": "https://github.com/yueker/dsh-lan-access/issues"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
